@@ -63,7 +63,7 @@ public class SemanticKernelConfiguration {
     public InvocationContext invocationContext() {
         return InvocationContext.builder()
                 .withPromptExecutionSettings(PromptExecutionSettings.builder()
-                        .withTemperature(0)
+                        .withTemperature(0.5)
                         .build())
                 .withReturnMode(InvocationReturnMode.LAST_MESSAGE_ONLY)
                 .withToolCallBehavior(ToolCallBehavior.allowAllKernelFunctions(true))

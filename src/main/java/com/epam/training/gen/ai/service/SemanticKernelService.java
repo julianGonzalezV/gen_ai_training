@@ -39,13 +39,16 @@ public class SemanticKernelService {
         this.history = history;
     }
 
-    public String responseGeneration(String inputPrompt) {
-        String promptWithFormat = inputPrompt.concat("""
-                When you are asked for books then return get_books from plugin
-                If you are asked about other topics except books, you must answer "Sorry, I'm just answering about books from Latin American history"
-                Finally, provide the output in JSON format, following next rules.
-                        
-                Rule 1. Sample response just when you are asked for books:
+    public String responseGeneration(String inputQuestion) {
+        String promptWithFormat = String.format("""
+                Your are going to be asked for books about world history. You should limit your answers to books returned by the get_books plugin.
+                Additionally, If you are asked about other topics except books, you must answer "Sorry, I'm just trained for answering about books from Latin American history"
+                Following the next output format:
+                Sample response when you are asked for other topics, be aware that you should not include the books key for this case:
+                {"response": "Sorry, I'm just answering about books from Latin American history"}
+                
+                When you are asked for books then return get_books from plugin following next output format .
+                Sample response just when you are asked for books:
                 {"books": [
                     {
                         "title": "Open Veins of Latin America: Five Centuries of the Pillage of a Continent",
@@ -58,10 +61,9 @@ public class SemanticKernelService {
                         "year": 2001
                     }
                 ]}
-                        
-                Rule2. Sample response when you are asked for other topics, be aware that you should not include the books key for this case:
-                    {"response": "Sorry, I'm just answering about books from Latin American history"}
-                """);
+                
+                Question: %s
+                """, inputQuestion);
 
 
         ContextVariableTypes
