@@ -41,7 +41,7 @@ public class SemanticKernelService {
 
     public String responseGeneration(String inputQuestion) {
         String promptWithFormat = String.format("""
-                Your are going to be asked for any question. Here how you should proceed to generate the reponse
+                Your are going to be asked for any question. Here how you should proceed to generate the response
                  - For the answer you should return 20 words.
                  - Per each question you should answer following the next JSON output format:
                     {
