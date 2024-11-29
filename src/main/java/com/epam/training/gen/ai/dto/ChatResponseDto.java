@@ -8,6 +8,5 @@ import java.util.List;
 @Data
 @AllArgsConstructor
 public class ChatResponseDto {
-    private String input;
-    private String generatedText;
+    private String response;
 }
