@@ -138,6 +138,42 @@ public class SemanticKernelService {
             response.append(result);
         }
 
+        log.info("Chat Response: " + response);
+        return response.toString();
+    }
+
+
+    public String responseGenerationHandlebarsTemplate(String inputQuestion) {
+        // Load prompt from resource
+        String handlebarsPromptYaml = EmbeddedResource.read("HandlebarsPrompt.yaml");
+
+
+        ContextVariableTypes
+                .addGlobalConverter(
+                        ContextVariableTypeConverter.builder(BookDto.class)
+                                .toPromptString(new Gson()::toJson)
+                                .build());
+
+        history.addUserMessage("promptWithFormat");
+
+        // Prompt AI for response to users input
+        List<ChatMessageContent<?>> results = chatCompletionService
+                .getChatMessageContentsAsync(history, kernel, invocationContext)
+                .block();
+
+        StringBuilder response = new StringBuilder();
+
+        for (ChatMessageContent<?> result : results) {
+            // Print the results
+            if (result.getAuthorRole() == AuthorRole.ASSISTANT && result.getContent() != null) {
+                log.info("Assistant > " + result);
+            }
+            // Add the message from the agent to the chat history
+            history.addMessage(result);
+            response.append(result);
+        }
+
+        log.info("Chat Response: " + response);
         return response.toString();
     }
 }
