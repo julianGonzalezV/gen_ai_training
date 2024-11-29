@@ -55,7 +55,7 @@ public class SemanticKernelConfiguration {
     public Kernel kernel(ChatCompletionService chatCompletionService, KernelPlugin bookKernelPlugin) {
         return Kernel.builder()
                 .withAIService(ChatCompletionService.class, chatCompletionService)
-                .withPlugin(bookKernelPlugin)
+                //.withPlugin(bookKernelPlugin) used it ti  narrow down the search/context  just for free practice
                 .build();
     }
 
