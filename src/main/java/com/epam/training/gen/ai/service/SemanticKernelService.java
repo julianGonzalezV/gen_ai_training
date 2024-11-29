@@ -44,7 +44,7 @@ public class SemanticKernelService {
                 Your are going to be asked for any question. Per each question you should answer following the next JSON output format:
                 {
                     "question": "The question being asked,
-                    "reponse": "The response coming from the AI model assistant"
+                    "response": "The response coming from the AI model assistant"
                 }
                 Question: %s
                 """, inputQuestion);
