@@ -41,12 +41,14 @@ public class SemanticKernelService {
 
     public String responseGeneration(String inputQuestion) {
         String promptWithFormat = String.format("""
-                Your are going to be asked for any question. Per each question you should answer following the next JSON output format:
-                {
+                Your are going to be asked for any question. Here how you should proceed to generate the reponse
+                 - For the answer you should return 20 words.
+                 - Per each question you should answer following the next JSON output format:
+                    {
                     "question": "The question being asked,
                     "response": "The response coming from the AI model assistant"
-                }
-                Question: %s
+                    }
+                Next the question you should answer: %s
                 """, inputQuestion);
 
         ContextVariableTypes
@@ -74,7 +76,7 @@ public class SemanticKernelService {
             response.append(result);
         }
 
-        return response.toString();
+        return results.toString();
     }
 
     /**
