@@ -1,6 +1,12 @@
 package com.epam.training.gen.ai.service;
 
 import com.epam.training.gen.ai.dto.BookDto;
+import com.epam.training.gen.ai.dto.ChatRequestDto;
+import com.epam.training.gen.ai.dto.ChatResponseDto;
+import com.epam.training.gen.ai.prompt.PromptData;
+import com.epam.training.gen.ai.prompt.TemplateSpecification;
+import com.github.jknack.handlebars.Handlebars;
+import com.github.jknack.handlebars.Template;
 import com.google.gson.Gson;
 import com.microsoft.semantickernel.Kernel;
 import com.microsoft.semantickernel.contextvariables.ContextVariableTypeConverter;
@@ -12,19 +18,26 @@ import com.microsoft.semantickernel.services.chatcompletion.ChatHistory;
 import com.microsoft.semantickernel.services.chatcompletion.ChatMessageContent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
+
+import java.io.InputStream;
+
+import org.yaml.snakeyaml.constructor.Constructor;
 
 import java.util.List;
 
 @Slf4j
 @Service
 public class SemanticKernelService {
-    Kernel kernel;
-    ChatCompletionService chatCompletionService;
-    String deploymentOrModelName;
-    InvocationContext invocationContext;
+    final Kernel kernel;
+    final ChatCompletionService chatCompletionService;
+    final String deploymentOrModelName;
+    final InvocationContext invocationContext;
     // History to store the conversation
-    ChatHistory history;
+    final ChatHistory history;
 
 
     public SemanticKernelService(Kernel kernel,
@@ -39,17 +52,38 @@ public class SemanticKernelService {
         this.history = history;
     }
 
-    public String responseGeneration(String inputQuestion) {
-        String promptWithFormat = String.format("""
-                Your are going to be asked for any question. Here how you should proceed to generate the response
-                 - For the answer you should return 20 words.
-                 - Per each question you should answer following the next JSON output format:
-                    {
-                    "question": "The question being asked,
-                    "response": "The response coming from the AI model assistant"
-                    }
-                Next the question you should answer: %s
-                """, inputQuestion);
+
+    /**
+     * This method generates a response to the user's input using Handlebars template
+     *
+     * @param requestDto - user's input
+     * @return response to the user's input
+     */
+    public ChatResponseDto responseGenerationHandlebarsTemplate(ChatRequestDto requestDto) {
+        Handlebars handlebars = new Handlebars();
+        try {
+            InputStream inputStream = new ClassPathResource("prompts/prompt-basic-template.yaml").getInputStream();
+            Yaml yaml = new Yaml(new Constructor(TemplateSpecification.class, new LoaderOptions()));
+            TemplateSpecification templateSpecification = yaml.loadAs(inputStream, TemplateSpecification.class);
+
+            Template template = handlebars.compileInline(templateSpecification.getTemplate());
+            PromptData promptData = new PromptData(requestDto.getName(), requestDto.getQuestion());
+            String prompt = template.apply(promptData);
+
+            return ChatResponseDto.builder()
+                    .question(requestDto.getQuestion())
+                    .response(responseGeneration(prompt))
+                    .build();
+        } catch (Exception e) {
+            log.error("Error reading the template file", e);
+            return ChatResponseDto.builder()
+                    .question(requestDto.getQuestion())
+                    .response("Error reading the template file")
+                    .build();
+        }
+    }
+
+    private String responseGeneration(String inputPrompt) {
 
         ContextVariableTypes
                 .addGlobalConverter(
@@ -57,7 +91,7 @@ public class SemanticKernelService {
                                 .toPromptString(new Gson()::toJson)
                                 .build());
 
-        history.addUserMessage(promptWithFormat);
+        history.addUserMessage(inputPrompt);
 
         // Prompt AI for response to users input
         List<ChatMessageContent<?>> results = chatCompletionService
@@ -77,103 +111,5 @@ public class SemanticKernelService {
         }
 
         return results.toString();
-    }
-
-    /**
-     * This version of the method is used for the free practice where the user is asked to provide books but
-     * response context is limited to Latin American history, by using the get_books plugin.
-     *
-     * @param inputQuestion
-     * @return
-     */
-    public String responseGenerationFreePractice(String inputQuestion) {
-        String promptWithFormat = String.format("""
-                Your are going to be asked for books about world history. You should limit your answers to books returned by the get_books plugin.
-                Additionally, If you are asked about other topics except books, you must answer "Sorry, I'm just trained for answering about books from Latin American history"
-                Following the next output format:
-                Sample response when you are asked for other topics, be aware that you should not include the books key for this case:
-                {"response": "Sorry, I'm just answering about books from Latin American history"}
-                                
-                When you are asked for books then return get_books from plugin following next output format .
-                Sample response just when you are asked for books:
-                {"books": [
-                    {
-                        "title": "Open Veins of Latin America: Five Centuries of the Pillage of a Continent",
-                        "author": "Eduardo Galeano",
-                        "year": 1971
-                    },
-                    {
-                        "title": "Guns, Germs, and Steel: The Fates of Human Societies",
-                        "author": "Jared Diamond",
-                        "year": 2001
-                    }
-                ]}
-                                
-                Question: %s
-                """, inputQuestion);
-
-
-        ContextVariableTypes
-                .addGlobalConverter(
-                        ContextVariableTypeConverter.builder(BookDto.class)
-                                .toPromptString(new Gson()::toJson)
-                                .build());
-
-        history.addUserMessage(promptWithFormat);
-
-        // Prompt AI for response to users input
-        List<ChatMessageContent<?>> results = chatCompletionService
-                .getChatMessageContentsAsync(history, kernel, invocationContext)
-                .block();
-
-        StringBuilder response = new StringBuilder();
-
-        for (ChatMessageContent<?> result : results) {
-            // Print the results
-            if (result.getAuthorRole() == AuthorRole.ASSISTANT && result.getContent() != null) {
-                log.info("Assistant > " + result);
-            }
-            // Add the message from the agent to the chat history
-            history.addMessage(result);
-            response.append(result);
-        }
-
-        log.info("Chat Response: " + response);
-        return response.toString();
-    }
-
-
-    public String responseGenerationHandlebarsTemplate(String inputQuestion) {
-        // Load prompt from resource
-        String handlebarsPromptYaml = EmbeddedResource.read("HandlebarsPrompt.yaml");
-
-
-        ContextVariableTypes
-                .addGlobalConverter(
-                        ContextVariableTypeConverter.builder(BookDto.class)
-                                .toPromptString(new Gson()::toJson)
-                                .build());
-
-        history.addUserMessage("promptWithFormat");
-
-        // Prompt AI for response to users input
-        List<ChatMessageContent<?>> results = chatCompletionService
-                .getChatMessageContentsAsync(history, kernel, invocationContext)
-                .block();
-
-        StringBuilder response = new StringBuilder();
-
-        for (ChatMessageContent<?> result : results) {
-            // Print the results
-            if (result.getAuthorRole() == AuthorRole.ASSISTANT && result.getContent() != null) {
-                log.info("Assistant > " + result);
-            }
-            // Add the message from the agent to the chat history
-            history.addMessage(result);
-            response.append(result);
-        }
-
-        log.info("Chat Response: " + response);
-        return response.toString();
     }
 }

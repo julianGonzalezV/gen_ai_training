@@ -21,8 +21,7 @@ public class ChatController {
 
     @PostMapping
     public ResponseEntity<ChatResponseDto> getChatResponse(@RequestBody ChatRequestDto chatRequest) {
-        String generatedText = semanticKernelService.responseGeneration(chatRequest.getInput());
-        ChatResponseDto response = new ChatResponseDto(generatedText);
+        ChatResponseDto response = semanticKernelService.responseGenerationHandlebarsTemplate(chatRequest);
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
 }
