@@ -15,6 +15,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+
 @Configuration
 public class SemanticKernelConfiguration {
     @Value("${client-openai-key}")
@@ -23,8 +27,9 @@ public class SemanticKernelConfiguration {
     @Value("${client-openai-endpoint}")
     private String apiEndpoint;
 
-    @Value("${client-openai-deployment-name}")
-    private String modelName;
+    @Value("${client-openai-deployment-names}")
+    private String[] modelNames;
+
 
     @Bean
     public OpenAIAsyncClient openAIAsyncClient() {
@@ -35,11 +40,15 @@ public class SemanticKernelConfiguration {
     }
 
     @Bean
-    public ChatCompletionService chatCompletionService(OpenAIAsyncClient client) {
-        return OpenAIChatCompletion.builder()
-                .withModelId(modelName)
-                .withOpenAIAsyncClient(client)
-                .build();
+    public Map<String, ChatCompletionService> chatCompletionService(OpenAIAsyncClient client) {
+        Map<String, ChatCompletionService> services = new HashMap<>();
+        Arrays.stream(modelNames).distinct()
+                .forEach(modelName -> services.put(modelName, OpenAIChatCompletion.builder()
+                        .withModelId(modelName)
+                        .withOpenAIAsyncClient(client)
+                        .build()));
+
+        return services;
     }
 
     @Bean

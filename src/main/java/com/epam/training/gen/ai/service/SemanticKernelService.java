@@ -28,26 +28,24 @@ import java.io.InputStream;
 import org.yaml.snakeyaml.constructor.Constructor;
 
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
 public class SemanticKernelService {
-    final Kernel kernel;
-    final ChatCompletionService chatCompletionService;
-    final String deploymentOrModelName;
-    final InvocationContext invocationContext;
+    private final Map<String, ChatCompletionService> chatCompletionServices;
+    private final String defaultModelName;
+    private final InvocationContext invocationContext;
     // History to store the conversation
-    final ChatHistory history;
+    private final ChatHistory history;
 
 
-    public SemanticKernelService(Kernel kernel,
+    public SemanticKernelService(Map<String, ChatCompletionService> chatCompletionServices,
                                  ChatHistory history,
-                                 ChatCompletionService chatCompletionService,
                                  InvocationContext invocationContext,
-                                 @Value("${client-openai-deployment-name}") String deploymentOrModelName) {
-        this.kernel = kernel;
-        this.chatCompletionService = chatCompletionService;
-        this.deploymentOrModelName = deploymentOrModelName;
+                                 @Value("${client-openai-default-model-name}") String defaultModelName) {
+        this.chatCompletionServices = chatCompletionServices;
+        this.defaultModelName = defaultModelName;
         this.invocationContext = invocationContext;
         this.history = history;
     }
@@ -70,9 +68,15 @@ public class SemanticKernelService {
             PromptData promptData = new PromptData(requestDto.getName(), requestDto.getQuestion());
             String prompt = template.apply(promptData);
 
+            String modelName = requestDto.getModelName() != null ? requestDto.getModelName() : defaultModelName;
+            ChatCompletionService chatCompletionService = chatCompletionServices.get(modelName);
+            if (chatCompletionService == null) {
+                throw new IllegalArgumentException("Model not found: " + modelName);
+            }
+
             return ChatResponseDto.builder()
                     .question(requestDto.getQuestion())
-                    .response(responseGeneration(prompt))
+                    .response(responseGeneration(prompt, chatCompletionService))
                     .build();
         } catch (Exception e) {
             log.error("Error reading the template file", e);
@@ -83,7 +87,7 @@ public class SemanticKernelService {
         }
     }
 
-    private String responseGeneration(String inputPrompt) {
+    private String responseGeneration(String inputPrompt, ChatCompletionService chatCompletionService) {
 
         ContextVariableTypes
                 .addGlobalConverter(
@@ -93,12 +97,11 @@ public class SemanticKernelService {
 
         history.addUserMessage(inputPrompt);
 
-        // Prompt AI for response to users input
         List<ChatMessageContent<?>> results = chatCompletionService
-                .getChatMessageContentsAsync(history, kernel, invocationContext)
+                .getChatMessageContentsAsync(history, Kernel.builder()
+                        .withAIService(ChatCompletionService.class, chatCompletionService)
+                        .build(), invocationContext)
                 .block();
-
-        StringBuilder response = new StringBuilder();
 
         for (ChatMessageContent<?> result : results) {
             // Print the results
@@ -107,7 +110,6 @@ public class SemanticKernelService {
             }
             // Add the message from the agent to the chat history
             history.addMessage(result);
-            response.append(result);
         }
 
         return results.toString();
