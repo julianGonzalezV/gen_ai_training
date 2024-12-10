@@ -3,7 +3,6 @@ package com.epam.training.gen.ai.configuration;
 import com.azure.ai.openai.OpenAIAsyncClient;
 import com.azure.ai.openai.OpenAIClientBuilder;
 import com.azure.core.credential.AzureKeyCredential;
-import com.microsoft.semantickernel.Kernel;
 import com.microsoft.semantickernel.aiservices.openai.chatcompletion.OpenAIChatCompletion;
 import com.microsoft.semantickernel.orchestration.InvocationContext;
 import com.microsoft.semantickernel.orchestration.InvocationReturnMode;
@@ -49,14 +48,6 @@ public class SemanticKernelConfiguration {
                         .build()));
 
         return services;
-    }
-
-    @Bean
-    public Kernel kernel(ChatCompletionService chatCompletionService) {
-        return Kernel.builder()
-                .withAIService(ChatCompletionService.class, chatCompletionService)
-                //.withPlugin(bookKernelPlugin) used it ti  narrow down the search/context  just for free practice
-                .build();
     }
 
     @Bean

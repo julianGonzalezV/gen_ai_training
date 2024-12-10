@@ -10,5 +10,4 @@ import lombok.NoArgsConstructor;
 public class ChatRequestDto {
     private String name;
     private String question;
-    private String modelName;
 }

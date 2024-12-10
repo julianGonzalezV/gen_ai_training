@@ -7,3 +7,4 @@ template: |
       Name: {{name}}
       Question: {{question}}
   Make sure to reference the customer by name response.
+  At the end of response indicate the AI model used

@@ -1,31 +1,17 @@
 package com.epam.training.gen.ai.service;
 
-import com.epam.training.gen.ai.dto.BookDto;
 import com.epam.training.gen.ai.dto.ChatRequestDto;
 import com.epam.training.gen.ai.dto.ChatResponseDto;
-import com.epam.training.gen.ai.prompt.PromptData;
-import com.epam.training.gen.ai.prompt.TemplateSpecification;
-import com.github.jknack.handlebars.Handlebars;
-import com.github.jknack.handlebars.Template;
-import com.google.gson.Gson;
 import com.microsoft.semantickernel.Kernel;
-import com.microsoft.semantickernel.contextvariables.ContextVariableTypeConverter;
-import com.microsoft.semantickernel.contextvariables.ContextVariableTypes;
 import com.microsoft.semantickernel.orchestration.InvocationContext;
 import com.microsoft.semantickernel.services.chatcompletion.AuthorRole;
 import com.microsoft.semantickernel.services.chatcompletion.ChatCompletionService;
 import com.microsoft.semantickernel.services.chatcompletion.ChatHistory;
 import com.microsoft.semantickernel.services.chatcompletion.ChatMessageContent;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
-import org.yaml.snakeyaml.LoaderOptions;
-import org.yaml.snakeyaml.Yaml;
-
-import java.io.InputStream;
-
-import org.yaml.snakeyaml.constructor.Constructor;
 
 import java.util.List;
 import java.util.Map;
@@ -57,27 +43,21 @@ public class SemanticKernelService {
      * @param requestDto - user's input
      * @return response to the user's input
      */
-    public ChatResponseDto responseGenerationHandlebarsTemplate(ChatRequestDto requestDto) {
-        Handlebars handlebars = new Handlebars();
+    public ChatResponseDto responseGeneration(ChatRequestDto requestDto, String modelName) {
         try {
-            InputStream inputStream = new ClassPathResource("prompts/prompt-basic-template.yaml").getInputStream();
-            Yaml yaml = new Yaml(new Constructor(TemplateSpecification.class, new LoaderOptions()));
-            TemplateSpecification templateSpecification = yaml.loadAs(inputStream, TemplateSpecification.class);
+            String prompt = requestDto.getQuestion();
 
-            Template template = handlebars.compileInline(templateSpecification.getTemplate());
-            PromptData promptData = new PromptData(requestDto.getName(), requestDto.getQuestion());
-            String prompt = template.apply(promptData);
-
-            String modelName = requestDto.getModelName() != null ? requestDto.getModelName() : defaultModelName;
-            ChatCompletionService chatCompletionService = chatCompletionServices.get(modelName);
+            String model = StringUtils.isNoneEmpty(modelName) ? modelName : defaultModelName;
+            ChatCompletionService chatCompletionService = chatCompletionServices.get(model);
             if (chatCompletionService == null) {
                 throw new IllegalArgumentException("Model not found: " + modelName);
             }
 
             return ChatResponseDto.builder()
                     .question(requestDto.getQuestion())
-                    .response(responseGeneration(prompt, chatCompletionService))
+                    .response(getResult(prompt, chatCompletionService))
                     .build();
+
         } catch (Exception e) {
             log.error("Error reading the template file", e);
             return ChatResponseDto.builder()
@@ -87,14 +67,7 @@ public class SemanticKernelService {
         }
     }
 
-    private String responseGeneration(String inputPrompt, ChatCompletionService chatCompletionService) {
-
-        ContextVariableTypes
-                .addGlobalConverter(
-                        ContextVariableTypeConverter.builder(BookDto.class)
-                                .toPromptString(new Gson()::toJson)
-                                .build());
-
+    private String getResult(String inputPrompt, ChatCompletionService chatCompletionService) {
         history.addUserMessage(inputPrompt);
 
         List<ChatMessageContent<?>> results = chatCompletionService
