@@ -18,3 +18,11 @@ but then I've decided to play with the configurations and see how the model beha
 Also I've changed the prompt to avoid answering for other topics, and limit it to Latin American history.
 
 I added a application.properties file to store the API key, endpoint and model name. This way, it's easier to change the configuration without changing the code.
+
+
+Task4:
+Create series of custom plugins the existing system.
+This function should be called by a model based on user request, it can return some data or make actions inside the application.
+As ideas for plugins you can use:
+Age calculator, Weather forecast, Currency converter, Turn of the lamp (just change the flag of some boolean variable),
+and so on, in general, any plugin that can do some calculations or provide some information outside model knowledge

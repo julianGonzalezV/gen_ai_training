@@ -2,8 +2,12 @@ package com.epam.training.gen.ai.service;
 
 import com.epam.training.gen.ai.dto.ChatRequestDto;
 import com.epam.training.gen.ai.dto.ChatResponseDto;
+import com.epam.training.gen.ai.plugins.EmployeeVacationCalculatorPlugin;
+import com.epam.training.gen.ai.plugins.LightsPlugin;
 import com.microsoft.semantickernel.Kernel;
 import com.microsoft.semantickernel.orchestration.InvocationContext;
+import com.microsoft.semantickernel.plugin.KernelPlugin;
+import com.microsoft.semantickernel.plugin.KernelPluginFactory;
 import com.microsoft.semantickernel.services.chatcompletion.AuthorRole;
 import com.microsoft.semantickernel.services.chatcompletion.ChatCompletionService;
 import com.microsoft.semantickernel.services.chatcompletion.ChatHistory;
@@ -71,20 +75,35 @@ public class SemanticKernelService {
         history.addUserMessage(inputPrompt);
 
         List<ChatMessageContent<?>> results = chatCompletionService
-                .getChatMessageContentsAsync(history, Kernel.builder()
-                        .withAIService(ChatCompletionService.class, chatCompletionService)
-                        .build(), invocationContext)
+                .getChatMessageContentsAsync(history,
+                        getKernel(chatCompletionService)
+                        , invocationContext)
                 .block();
 
-        for (ChatMessageContent<?> result : results) {
-            // Print the results
+        results.stream().forEach(result -> {
             if (result.getAuthorRole() == AuthorRole.ASSISTANT && result.getContent() != null) {
                 log.info("Assistant > " + result);
             }
             // Add the message from the agent to the chat history
             history.addMessage(result);
-        }
+        });
 
         return results.toString();
+    }
+
+
+    private Kernel getKernel(ChatCompletionService chatCompletionService) {
+
+        KernelPlugin lightPlugin = KernelPluginFactory.createFromObject(new LightsPlugin(),
+                "LightsPlugin");
+
+        KernelPlugin employeeVacationCalculatorPlugin = KernelPluginFactory.createFromObject(new EmployeeVacationCalculatorPlugin(),
+                "EmployeeVacationCalculatorPlugin");
+
+        return Kernel.builder()
+                .withAIService(ChatCompletionService.class, chatCompletionService)
+                .withPlugin(lightPlugin)
+                .withPlugin(employeeVacationCalculatorPlugin)
+                .build();
     }
 }
