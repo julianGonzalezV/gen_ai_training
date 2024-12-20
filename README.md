@@ -26,3 +26,18 @@ This function should be called by a model based on user request, it can return s
 As ideas for plugins you can use:
 Age calculator, Weather forecast, Currency converter, Turn of the lamp (just change the flag of some boolean variable),
 and so on, in general, any plugin that can do some calculations or provide some information outside model knowledge
+
+
+Task5:
+Qdrant is a vector database that allows you to store and search for vectors.
+Qdrant installation and configuration:
+https://qdrant.tech/documentation/guides/installation/
+https://qdrant.tech/documentation/interfaces/#grpc-interface
+1. Pull docker image
+  - docker pull qdrant/qdrant
+  - Create a directory for storing the database called qdrant_storage 
+  - From parent folder run:
+    - docker run -p 6333:6333 -p 6334:6334 -v /qdrant_storage:/qdrant/storage:z qdrant/qdrant  
+      - If you decide to use gRPC, you must expose 6334 the port when starting Qdrant.
+
+2. Open dashboard http://localhost:6333/dashboard#/collections
