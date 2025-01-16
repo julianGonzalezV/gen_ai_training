@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+import java.util.Collection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -102,9 +103,32 @@ public class VectorStorageService {
                                 .setCollectionName(COLLECTION_NAME)
                                 .addAllVector(qe)
                                 .setWithPayload(enable(true))
-                                .setLimit(2)
+                                .setLimit(1)
                                 .build())
                 .get();
+    }
+
+    public List<String> searchEmbeddings(String input) {
+        List<EmbeddingItem> embeddings = getEmbeddings(input);
+        List<Float> embeddingVector = embeddings.stream().map(EmbeddingItem::getEmbedding)
+                .flatMap(Collection::stream)
+                .toList();
+
+        SearchPoints searchPoints = SearchPoints.newBuilder()
+                .setCollectionName(COLLECTION_NAME)
+                .addAllVector(embeddingVector)
+                .setWithPayload(enable(true))
+                .setLimit(1)
+                .build();
+
+        try {
+            List<ScoredPoint> scoredPoints = qdrantClient.searchAsync(searchPoints).get();
+            return scoredPoints.stream()
+                    .map(point -> point.getPayloadMap().get("input").getStringValue())
+                    .toList();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**

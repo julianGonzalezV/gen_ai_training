@@ -2,54 +2,78 @@ package com.epam.training.gen.ai.service;
 
 import com.epam.training.gen.ai.dto.ChatRequestDto;
 import com.epam.training.gen.ai.dto.ChatResponseDto;
-import com.epam.training.gen.ai.plugins.EmployeeVacationCalculatorPlugin;
-import com.epam.training.gen.ai.plugins.LightsPlugin;
+import com.epam.training.gen.ai.dto.VectorRequestDto;
+import com.epam.training.gen.ai.vector.VectorStorageService;
 import com.microsoft.semantickernel.Kernel;
 import com.microsoft.semantickernel.orchestration.InvocationContext;
-import com.microsoft.semantickernel.plugin.KernelPlugin;
-import com.microsoft.semantickernel.plugin.KernelPluginFactory;
 import com.microsoft.semantickernel.services.chatcompletion.AuthorRole;
 import com.microsoft.semantickernel.services.chatcompletion.ChatCompletionService;
 import com.microsoft.semantickernel.services.chatcompletion.ChatHistory;
 import com.microsoft.semantickernel.services.chatcompletion.ChatMessageContent;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
 @Service
 @Slf4j
-public class SemanticKernelService {
+public class RAGSampleService {
+    public static final String QUESTION = "\n\nQuestion: ";
+
+    private final VectorStorageService vectorStorageService;
+    private final ChatHistory history;
+    private final InvocationContext invocationContext;
     private final Map<String, ChatCompletionService> chatCompletionServices;
     private final String defaultModelName;
-    private final InvocationContext invocationContext;
-    // History to store the conversation
-    private final ChatHistory history;
 
-
-    public SemanticKernelService(Map<String, ChatCompletionService> chatCompletionServices,
-                                 ChatHistory history,
-                                 InvocationContext invocationContext,
-                                 @Value("${client-openai-default-model-name}") String defaultModelName) {
+    public RAGSampleService(VectorStorageService vectorStorageService, ChatHistory history, InvocationContext invocationContext, Map<String, ChatCompletionService> chatCompletionServices, @Value("${client-openai-default-model-name}") String defaultModelName) {
+        this.vectorStorageService = vectorStorageService;
+        this.history = history;
+        this.invocationContext = invocationContext;
         this.chatCompletionServices = chatCompletionServices;
         this.defaultModelName = defaultModelName;
-        this.invocationContext = invocationContext;
-        this.history = history;
     }
 
+    public void uploadPdfToKnowledgeSource(MultipartFile file) throws IOException, ExecutionException, InterruptedException {
+        String text = extractTextFromPdf(file);
+        List<String> chunks = splitTextIntoChunks(text, 500); // Split text into chunks of 500 characters
+        for (String chunk : chunks) {
+            vectorStorageService.processAndSaveText(VectorRequestDto.builder().text(chunk).topic("").build());
+        }
+    }
 
-    /**
-     * This method generates a response to the user's input using Handlebars template
-     *
-     * @param requestDto - user's input
-     * @return response to the user's input
-     */
-    public ChatResponseDto responseGeneration(ChatRequestDto requestDto, String modelName) {
+    private String extractTextFromPdf(MultipartFile file) throws IOException {
+        try (PDDocument document = PDDocument.load(file.getInputStream())) {
+            PDFTextStripper pdfStripper = new PDFTextStripper();
+            return pdfStripper.getText(document);
+        }
+    }
+
+    private List<String> splitTextIntoChunks(String text, int chunkSize) {
+        List<String> chunks = new ArrayList<>();
+        int length = text.length();
+        for (int i = 0; i < length; i += chunkSize) {
+            chunks.add(text.substring(i, Math.min(length, i + chunkSize)));
+        }
+        return chunks;
+    }
+
+    public ChatResponseDto getChatResponse(ChatRequestDto requestDto, String modelName) {
         try {
-            String prompt = requestDto.getQuestion();
+            String userPrompt = requestDto.getQuestion();
+
+            List<String> embeddingResults = vectorStorageService.searchEmbeddings(userPrompt);
+            String embeddingAsString = embeddingResults.get(0);
+            log.info("EmbeddingResults: " + embeddingAsString);
 
             String model = StringUtils.isNoneEmpty(modelName) ? modelName : defaultModelName;
             ChatCompletionService chatCompletionService = chatCompletionServices.get(model);
@@ -57,9 +81,11 @@ public class SemanticKernelService {
                 throw new IllegalArgumentException("Model not found: " + modelName);
             }
 
+            String lLmQuery = embeddingAsString + QUESTION + userPrompt;
+
             return ChatResponseDto.builder()
                     .question(requestDto.getQuestion())
-                    .response(getResult(prompt, chatCompletionService))
+                    .response(getResult(lLmQuery, chatCompletionService))
                     .build();
 
         } catch (Exception e) {
@@ -93,17 +119,8 @@ public class SemanticKernelService {
 
 
     private Kernel getKernel(ChatCompletionService chatCompletionService) {
-
-        KernelPlugin lightPlugin = KernelPluginFactory.createFromObject(new LightsPlugin(),
-                "LightsPlugin");
-
-        KernelPlugin employeeVacationCalculatorPlugin = KernelPluginFactory.createFromObject(new EmployeeVacationCalculatorPlugin(),
-                "EmployeeVacationCalculatorPlugin");
-
         return Kernel.builder()
                 .withAIService(ChatCompletionService.class, chatCompletionService)
-                .withPlugin(lightPlugin)
-                .withPlugin(employeeVacationCalculatorPlugin)
                 .build();
     }
 }
