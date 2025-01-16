@@ -8,6 +8,7 @@ import com.epam.training.gen.ai.dto.VectorRequestDto;
 import io.qdrant.client.QdrantClient;
 import io.qdrant.client.grpc.Collections;
 import io.qdrant.client.grpc.Collections.VectorParams;
+import io.qdrant.client.grpc.JsonWithInt;
 import io.qdrant.client.grpc.Points.PointStruct;
 import io.qdrant.client.grpc.Points.ScoredPoint;
 import io.qdrant.client.grpc.Points.SearchPoints;
@@ -16,16 +17,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+import java.util.Collection;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
 import static io.qdrant.client.PointIdFactory.id;
-import static io.qdrant.client.ValueFactory.value;
 import static io.qdrant.client.VectorsFactory.vectors;
 import static io.qdrant.client.WithPayloadSelectorFactory.enable;
-import static java.lang.System.currentTimeMillis;
 
 /**
  * Service class for processing text into embeddings and interacting with Qdrant for vector storage and retrieval.
@@ -50,18 +50,11 @@ public class VectorStorageService {
      */
     public void processAndSaveText(VectorRequestDto vectorRequestDto) throws ExecutionException, InterruptedException {
         var embeddings = getEmbeddings(vectorRequestDto.getText());
-        var points = new ArrayList<List<Float>>();
-        embeddings.forEach(
-                embeddingItem -> {
-                    var values = new ArrayList<>(embeddingItem.getEmbedding());
-                    points.add(values);
-                });
 
-        var pointStructs = new ArrayList<PointStruct>();
-        points.forEach(point -> {
-            var pointStruct = getPointStruct(point, vectorRequestDto.getTopic());
-            pointStructs.add(pointStruct);
-        });
+        List<PointStruct> pointStructs = embeddings.stream()
+                .map(EmbeddingItem::getEmbedding)
+                .map(point -> getPointStruct(point, vectorRequestDto.getText()))
+                .toList();
 
         boolean collectionDontExists = !qdrantClient.collectionExistsAsync(COLLECTION_NAME).get();
 
@@ -102,9 +95,32 @@ public class VectorStorageService {
                                 .setCollectionName(COLLECTION_NAME)
                                 .addAllVector(qe)
                                 .setWithPayload(enable(true))
-                                .setLimit(2)
+                                .setLimit(1)
                                 .build())
                 .get();
+    }
+
+    public List<String> searchEmbeddings(String input) {
+        List<EmbeddingItem> embeddings = getEmbeddings(input);
+        List<Float> vector = embeddings.stream().map(EmbeddingItem::getEmbedding)
+                .flatMap(Collection::stream)
+                .toList();
+
+        SearchPoints searchPoints = SearchPoints.newBuilder()
+                .setCollectionName(COLLECTION_NAME)
+                .addAllVector(vector)
+                .setWithPayload(enable(true))
+                .setLimit(2)
+                .build();
+
+        try {
+            List<ScoredPoint> scoredPoints = qdrantClient.searchAsync(searchPoints).get();
+            return scoredPoints.stream()
+                    .map(point -> point.getPayloadMap().get("input").getStringValue())
+                    .toList();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -141,7 +157,7 @@ public class VectorStorageService {
      * @throws InterruptedException if the thread is interrupted during execution
      * @throws ExecutionException if the saving operation fails
      */
-    private void saveVector(ArrayList<PointStruct> pointStructs) throws InterruptedException, ExecutionException {
+    private void saveVector(List<PointStruct> pointStructs) throws InterruptedException, ExecutionException {
         var updateResult = qdrantClient.upsertAsync(COLLECTION_NAME, pointStructs).get();
         log.info(updateResult.getStatus().name());
     }
@@ -152,11 +168,11 @@ public class VectorStorageService {
      * @param point the vector values
      * @return a {@link PointStruct} object containing the vector and associated metadata
      */
-    private PointStruct getPointStruct(List<Float> point, String topic) {
+    private PointStruct getPointStruct(List<Float> point, String input) {
         return PointStruct.newBuilder()
-                .setId(id(currentTimeMillis()))
+                .setId(id(UUID.randomUUID()))
                 .setVectors(vectors(point))
-                .putAllPayload(Map.of("topic", value(topic)))
+                .putPayload("input", JsonWithInt.Value.newBuilder().setStringValue(input).build())
                 .build();
     }
 
